@@ -1,0 +1,12 @@
+#Install Az Module
+
+##https://learn.microsoft.com/en-us/powershell/azure/install-azps-windows?view=azps-16.3.0&tabs=powershell&pivots=windows-psgallery
+
+
+Get-Module -Name Az.Resources
+
+
+Connect-AzAccount -Tenant "91f820e7-a557-448d-8ccf-c7452516ce24"
+
+
+(Get-AzPolicyAlias -NamespaceMatch "Microsoft.Storage" -ResourceType "storageAccounts/blobServices").Aliases | Select-Object Name | Format-Table -AutoSize
