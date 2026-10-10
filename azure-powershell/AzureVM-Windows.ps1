@@ -67,4 +67,19 @@ $vmConfig = New-AzVMConfig -VMName $vmName -VMSize $vmSize |
 New-AzVM -ResourceGroupName $resourcegroupname -Location $location -VM $vmConfig
 
 
+$settings = @{
+    commandToExecute = "powershell.exe Install-WindowsFeature -Name Web-Server -IncludeManagemntTools"
+}
+
+Set-AzVMExtension `
+    -ResourceGroupName $resourceGroup `
+    -VMName $vmName `
+    -Name "CustomScriptExtension" `
+    -Publisher "Microsoft.Compute" `
+    -ExtensionType "CustomScriptExtension" `
+    -TypeHandlerVersion "1.10" `
+    -Settings $settings `
+    -Location "EastUS"
+
+
 
