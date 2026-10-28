@@ -1,0 +1,51 @@
+
+{
+  "rules": [
+    {
+      "enabled": true,
+      "name": "policy-lifecycle",
+      "type": "Lifecycle",
+      "definition": {
+        "filters": {
+          "blobTypes": ["blockBlob"],
+          "prefixMatch": ["policy/"]
+        },
+        "actions": {
+          "baseBlob": {
+              "delete": {
+              "daysAfterModificationGreaterThan": 365
+            }
+          }
+        }
+      }
+    },
+    {
+      "enabled": true,
+      "name": "invoice-lifecycle",
+      "type": "Lifecycle",
+      "definition": {
+        "actions": {
+          "baseBlob": {
+            "tierToCold": {
+              "daysAfterModificationGreaterThan": 90
+            },
+            "tierToCool": {
+              "daysAfterModificationGreaterThan": 1
+            },
+            "delete": {
+              "daysAfterModificationGreaterThan": 180
+            }
+          }
+        },
+        "filters": {
+          "blobTypes": [
+            "blockBlob"
+          ],
+          "prefixMatch": [
+            "invoices/"
+          ]
+        }
+      }
+    }
+  ]
+}

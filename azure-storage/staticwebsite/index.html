@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Sample resume for Jordan Taylor, an Azure Cloud Architect with 10 years of experience."
+    />
+    <meta name="theme-color" content="#f4f7fb" />
+    <title>Jordan Taylor | Azure Cloud Architect Resume</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="resume-shell">
+      <header class="resume-header">
+        <div class="identity">
+          <p class="sample-label">SAMPLE RESUME · FICTIONAL PROFILE</p>
+          <h1>Jordan Taylor</h1>
+          <p class="job-title">Azure Cloud Architect</p>
+          <p class="headline">
+            Secure, scalable cloud platforms that connect business strategy with reliable
+            engineering.
+          </p>
+        </div>
+        <button class="print-button" id="print-resume" type="button">Print / Save as PDF</button>
+        <address class="contact-details">
+          <a href="mailto:jordan.taylor@example.com">jordan.taylor@example.com</a>
+          <a href="tel:+12065550142">+1 (206) 555-0142</a>
+          <span>Seattle, WA</span>
+          <a href="https://www.linkedin.com/in/jordan-taylor-cloud/">linkedin.com/in/jordan-taylor-cloud</a>
+        </address>
+      </header>
+
+      <main>
+        <section class="resume-section" id="summary">
+          <h2>Professional Summary</h2>
+          <p>
+            Azure Cloud Architect with 10 years of experience designing and delivering
+            enterprise cloud platforms. Skilled in Azure landing zones, migration strategy,
+            networking, identity, security, governance, and infrastructure as code. Known for
+            translating business requirements into practical architectures and helping
+            multidisciplinary teams deliver secure, resilient, and cost-aware solutions.
+          </p>
+        </section>
+
+        <section class="resume-section" id="skills">
+          <h2>Technical Skills</h2>
+          <div class="skills-grid">
+            <div><h3>Azure Platform</h3><p>Azure Landing Zones, Management Groups, Subscriptions, Azure Policy, Azure Monitor</p></div>
+            <div><h3>Infrastructure</h3><p>Virtual Networks, VPN Gateway, ExpressRoute, Load Balancer, Azure Firewall, Private Link</p></div>
+            <div><h3>Security &amp; Identity</h3><p>Microsoft Entra ID, RBAC, Defender for Cloud, Key Vault, Zero Trust, governance</p></div>
+            <div><h3>Automation &amp; Delivery</h3><p>Terraform, Bicep, Azure DevOps, GitHub Actions, PowerShell, CI/CD</p></div>
+            <div><h3>Cloud Architecture</h3><p>Migration, modernization, high availability, disaster recovery, Well-Architected Framework</p></div>
+            <div><h3>Leadership</h3><p>Technical roadmaps, architecture reviews, stakeholder communication, mentoring</p></div>
+          </div>
+        </section>
+
+        <section class="resume-section" id="experience">
+          <h2>Professional Experience</h2>
+          <article class="role">
+            <div class="role-heading">
+              <div>
+                <h3>Senior Azure Cloud Architect</h3>
+                <p class="company">Northstar Digital · Seattle, WA</p>
+              </div>
+              <p class="date">2021 – Present</p>
+            </div>
+            <ul>
+              <li>Designed a multi-subscription Azure landing zone for 30+ application teams, standardizing identity, connectivity, policy, and monitoring.</li>
+              <li>Led migration planning for 80+ application workloads, defining wave plans, dependencies, target architectures, and recovery requirements.</li>
+              <li>Introduced reusable Terraform and Bicep modules, reducing environment provisioning time by an illustrative 60%.</li>
+              <li>Partnered with security and platform teams to implement governance guardrails and improve cloud security posture.</li>
+            </ul>
+          </article>
+          <article class="role">
+            <div class="role-heading">
+              <div>
+                <h3>Azure Cloud Engineer</h3>
+                <p class="company">Contoso Systems · Portland, OR</p>
+              </div>
+              <p class="date">2016 – 2021</p>
+            </div>
+            <ul>
+              <li>Built and operated Azure infrastructure for business applications, including networking, compute, storage, backup, and monitoring.</li>
+              <li>Automated routine deployments and operational tasks with PowerShell and Azure Resource Manager templates.</li>
+              <li>Worked with application teams to improve availability, troubleshoot incidents, and document operational runbooks.</li>
+              <li>Supported hybrid connectivity and phased migration of services from on-premises environments to Azure.</li>
+            </ul>
+          </article>
+          <p class="sample-note">
+            This is fictional example content. Replace employers, dates, responsibilities,
+            and all metrics with accurate information before using.
+          </p>
+        </section>
+
+        <section class="resume-section" id="projects">
+          <h2>Selected Projects</h2>
+          <article class="project">
+            <h3>Enterprise Azure Landing Zone</h3>
+            <p>
+              Designed a governed Azure foundation with management group hierarchy,
+              subscription vending, centralized logging, secure connectivity, and policy
+              controls to support consistent workload onboarding.
+            </p>
+          </article>
+          <article class="project">
+            <h3>Business-Critical Application Modernization</h3>
+            <p>
+              Defined a resilient target architecture and phased migration approach for a
+              customer-facing application, including private networking, managed identity,
+              observability, backup, and disaster recovery.
+            </p>
+          </article>
+        </section>
+
+        <section class="resume-section two-column">
+          <div id="certifications">
+            <h2>Certifications</h2>
+            <ul class="simple-list">
+              <li>Microsoft Certified: Azure Solutions Architect Expert</li>
+              <li>Microsoft Certified: Azure Administrator Associate</li>
+              <li>HashiCorp Certified: Terraform Associate</li>
+            </ul>
+          </div>
+          <div id="education">
+            <h2>Education</h2>
+            <h3>B.S. Information Systems</h3>
+            <p class="company">Pacific Northwest University · 2012 – 2016</p>
+          </div>
+        </section>
+      </main>
+      <footer class="resume-footer">Jordan Taylor · Sample resume for demonstration purposes</footer>
+    </div>
+    <script src="script.js"></script>
+  </body>
+</html>
