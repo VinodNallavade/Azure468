@@ -10,7 +10,7 @@ $ErrorActionPreference = "Stop"
 # STEP 0 - LOGIN AND VARIABLES
 # ============================================================
 
-Connect-AzAccount
+Connect-AzAccount -tenant 91f820e7-a557-448d-8ccf-c7452516ce24 -Subscription 'b36625e9-5631-467e-97b9-752881063bba'
 
 # Uncomment if you need to select a subscription
 # Set-AzContext -SubscriptionId "<subscription-id>"
@@ -22,7 +22,7 @@ $rgName = "rg-serviceendpoint-demo"
 $vnetName = "vnet-serviceendpoint"
 $subnetName = "subnet-app"
 
-$vmName = "vm-serviceendpoint"
+$vmName = "azvmsvcep"
 $nicName = "nic-serviceendpoint"
 
 $storageName = "stse$suffix"
@@ -231,54 +231,81 @@ Write-Host "SAS URL generated successfully."
 # This script runs INSIDE the Windows VM.
 
 $vmTestScript = @'
-param([string]$Url)
+param([string]$EncodedUrl)
 
-Write-Output "==================================="
-Write-Output "Testing Azure Storage from VM"
-Write-Output "==================================="
+Write-Output "VM SCRIPT VERSION: 2"
 
-$storageHost = ([uri]$Url).Host
-
-Write-Output "Storage DNS Resolution:"
-
-Resolve-DnsName $storageHost -Type A |
-    Select-Object Name, IPAddress |
-    Format-Table |
-    Out-String |
-    Write-Output
+if ([string]::IsNullOrWhiteSpace($EncodedUrl)) {
+    Write-Output "ERROR: EncodedUrl parameter is empty."
+    exit 1
+}
 
 try {
+    $Url = [System.Text.Encoding]::UTF8.GetString(
+        [Convert]::FromBase64String($EncodedUrl)
+    )
 
+    $parsedUrl = [uri]$Url
+
+    if (
+        -not $parsedUrl.IsAbsoluteUri -or
+        $parsedUrl.Scheme -ne "https" -or
+        [string]::IsNullOrWhiteSpace($parsedUrl.Host)
+    ) {
+        throw "Decoded URL is not a valid HTTPS URL."
+    }
+
+    $storageHost = $parsedUrl.Host
+
+    Write-Output "Storage Host: $storageHost"
+}
+catch {
+    Write-Output "URL VALIDATION FAILED: $($_.Exception.Message)"
+    exit 1
+}
+
+Write-Output "`nStorage DNS Resolution:"
+
+try {
+    Resolve-DnsName -Name $storageHost -Type A -ErrorAction Stop |
+        Select-Object Name, IPAddress |
+        Format-Table |
+        Out-String |
+        Write-Output
+}
+catch {
+    Write-Output "DNS RESOLUTION FAILED: $($_.Exception.Message)"
+}
+
+Write-Output "`nTesting Storage HTTP Connectivity:"
+
+try {
     $response = Invoke-WebRequest `
         -Uri $Url `
         -UseBasicParsing `
-        -TimeoutSec 30
+        -TimeoutSec 30 `
+        -ErrorAction Stop
 
     Write-Output "VM CONNECTION SUCCESSFUL"
     Write-Output "HTTP Status: $($response.StatusCode)"
     Write-Output "Blob Content: $($response.Content)"
-
 }
 catch {
-
     Write-Output "VM CONNECTION FAILED"
     Write-Output $_.Exception.Message
 
     if ($_.Exception.Response) {
         Write-Output "HTTP Status: $([int]$_.Exception.Response.StatusCode)"
     }
-
 }
 '@
 
-$vmScriptPath = Join-Path `
-    $env:TEMP `
-    "Test-StorageFromVM.ps1"
+$vmScriptPath = Join-Path $env:TEMP "Test-StorageFromVM.ps1"
 
-$vmTestScript |
-    Set-Content -Path $vmScriptPath -Encoding UTF8
-
-
+Set-Content `
+    -Path $vmScriptPath `
+    -Value $vmTestScript `
+    -Encoding UTF8
 # ============================================================
 # STEP 8 - CREATE CONNECTIVITY TEST FUNCTIONS
 # ============================================================
@@ -318,21 +345,45 @@ function Test-FromLocal {
 
 function Test-FromVM {
 
-    Write-Host "`nTesting Storage from AZURE VM..." `
-        -ForegroundColor Cyan
+    Write-Host "`nTesting Storage from AZURE VM..." -ForegroundColor Cyan
 
-    $result = Invoke-AzVMRunCommand `
-        -ResourceGroupName $rgName `
-        -VMName $vmName `
-        -CommandId "RunPowerShellScript" `
-        -ScriptPath $vmScriptPath `
-        -Parameter @{ Url = $sasUrl }
+    if ([string]::IsNullOrWhiteSpace($sasUrl)) {
+        throw "SAS URL is empty. Regenerate the SAS URL."
+    }
 
-    $result.Value | ForEach-Object {
-        Write-Host $_.Message
+    # Validate locally before sending to VM
+    $parsed = [uri]$sasUrl
+
+    if (-not $parsed.IsAbsoluteUri -or
+        [string]::IsNullOrWhiteSpace($parsed.Host)) {
+        throw "SAS URL is invalid."
+    }
+
+    Write-Host "Storage Host: $($parsed.Host)"
+    Write-Host "VM Script: $vmScriptPath"
+
+    $encodedUrl = [Convert]::ToBase64String(
+        [System.Text.Encoding]::UTF8.GetBytes($sasUrl)
+    )
+
+    try {
+        $result = Invoke-AzVMRunCommand `
+            -ResourceGroupName $rgName `
+            -VMName $vmName `
+            -CommandId "RunPowerShellScript" `
+            -ScriptPath $vmScriptPath `
+            -Parameter @{ EncodedUrl = $encodedUrl } `
+            -ErrorAction Stop
+
+        $result.Value | ForEach-Object {
+            Write-Host $_.Message
+        }
+    }
+    catch {
+        Write-Host "VM RUN COMMAND FAILED" -ForegroundColor Red
+        Write-Host $_.Exception.Message -ForegroundColor Red
     }
 }
-
 
 # ============================================================
 # PHASE 1 - WITHOUT SERVICE ENDPOINT
@@ -354,7 +405,17 @@ $vnet.Subnets[0].ServiceEndpoints
 # TEST 1 - LOCAL
 Test-FromLocal
 
-# TEST 2 - AZURE VM
+
+
+# Verify the VM script file was updated
+Get-Content $vmScriptPath | Select-Object -First 8
+
+# Verify the SAS URL locally without displaying the token
+$parsed = [uri]$sasUrl
+Write-Host "Host: $($parsed.Host)"
+Write-Host "Scheme: $($parsed.Scheme)"
+
+# Execute the VM test
 Test-FromVM
 
 Write-Host "`nEXPECTED RESULTS:"

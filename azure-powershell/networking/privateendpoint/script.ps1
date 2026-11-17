@@ -10,7 +10,7 @@ $ErrorActionPreference = "Stop"
 # 1. LOGIN AND VARIABLES
 # ------------------------------------------------------------
 
-Connect-AzAccount
+Connect-AzAccount -tenant 91f820e7-a557-448d-8ccf-c7452516ce24 -Subscription 'b36625e9-5631-467e-97b9-752881063bba'
 
 $location = "centralindia"
 $suffix = Get-Random -Minimum 100000 -Maximum 999999
@@ -160,48 +160,48 @@ $storageHost = "$storageName.blob.core.windows.net"
 # ------------------------------------------------------------
 
 # Script that runs inside Azure VM
-$vmTest = @'
-param([string]$Url)
-
-$storageHost = ([uri]$Url).Host
-
-Write-Output "DNS RESULT:"
-Resolve-DnsName $storageHost -Type A |
-    Select-Object Name, IPAddress |
-    Format-Table |
-    Out-String |
-    Write-Output
-
+$vmTest =  @'
+param([string]$EncodedUrl)
+Write-Output 'VM TEST SCRIPT VERSION: PRIVATE-ENDPOINT-1'
+if ([string]::IsNullOrWhiteSpace($EncodedUrl)) { Write-Output 'ERROR: EncodedUrl was empty'; exit 1 }
 try {
-    $response = Invoke-WebRequest `
-        -Uri $Url `
-        -UseBasicParsing `
-        -TimeoutSec 30
-
-    Write-Output "VM SUCCESS: HTTP $($response.StatusCode)"
-}
-catch {
-    Write-Output "VM FAILED:"
-    Write-Output $_.Exception.Message
+    $Url = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($EncodedUrl))
+    $uri = [uri]$Url
+    if (-not $uri.IsAbsoluteUri -or $uri.Scheme -ne 'https' -or -not $uri.Host) { throw 'Invalid HTTPS URL' }
+    $storageHost = $uri.Host
+} catch { Write-Output "URL VALIDATION FAILED: $($_.Exception.Message)"; exit 1 }
+Write-Output "Storage Host: $storageHost"
+Write-Output 'DNS RESOLUTION:'
+try {
+    Resolve-DnsName -Name $storageHost -Type A -ErrorAction Stop |
+        Where-Object { $_.IPAddress } |
+        Select-Object Name, IPAddress | Format-Table | Out-String | Write-Output
+} catch { Write-Output "DNS FAILED: $($_.Exception.Message)" }
+Write-Output 'HTTP CONNECTIVITY:'
+try {
+    $r = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 30 -ErrorAction Stop
+    Write-Output "VM CONNECTION SUCCESSFUL - HTTP $($r.StatusCode)"
+    Write-Output "Blob Content: $($r.Content)"
+} catch {
+    Write-Output "VM CONNECTION FAILED: $($_.Exception.Message)"
+    if ($_.Exception.Response) { Write-Output "HTTP Status: $([int]$_.Exception.Response.StatusCode)" }
 }
 '@
 
 $scriptPath = Join-Path $env:TEMP "vm-test.ps1"
 $vmTest | Set-Content $scriptPath
 
-function Test-VM {
-    $result = Invoke-AzVMRunCommand `
-        -ResourceGroupName $rg `
-        -VMName $vmName `
-        -CommandId "RunPowerShellScript" `
-        -ScriptPath $scriptPath `
-        -Parameter @{ Url = $sasUrl }
-
-    $result.Value | ForEach-Object {
-        Write-Host $_.Message
+function Test-FromVM {
+    Write-Host "`nTesting from AZURE VM..." -ForegroundColor Yellow
+    $encodedUrl = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($sasUrl))
+    try {
+        $result = Invoke-AzVMRunCommand -ResourceGroupName $rg -VMName $vmName -CommandId 'RunPowerShellScript' -ScriptPath $vmScriptPath -Parameter @{ EncodedUrl = $encodedUrl } -ErrorAction Stop
+        $result.Value | ForEach-Object { Write-Host $_.Message }
+    } catch {
+        Write-Host "AZURE VM RUN COMMAND FAILED: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host 'This is a Compute Run Command failure, not proof of Storage connectivity.'
     }
 }
-
 function Test-Local {
     Write-Host "`nLOCAL DNS:"
     Resolve-DnsName $storageHost -Type A
@@ -226,7 +226,7 @@ Write-Host "`nPHASE 1 - BEFORE PRIVATE ENDPOINT" `
     -ForegroundColor Yellow
 
 Test-Local
-Test-VM
+Test-FromVM
 
 # Expected:
 # Local -> Public IP -> HTTP 200
@@ -301,7 +301,7 @@ Read-Host "Press Enter to test Private Endpoint"
 Write-Host "`nPHASE 2 - PRIVATE ENDPOINT ENABLED" `
     -ForegroundColor Yellow
 
-Test-VM
+Test-FromVM
 Test-Local
 
 # Expected:
@@ -329,7 +329,7 @@ Write-Host "`nPHASE 3 - PUBLIC ACCESS DISABLED" `
     -ForegroundColor Green
 
 Test-Local
-Test-VM
+Test-FromVM
 
 # Expected:
 # Local -> HTTP 403
