@@ -1,151 +1,178 @@
-# Azure Public Standard Load Balancer - End-to-End Classroom Lab
-# Prerequisites: Az PowerShell modules, Azure subscription, permission to create resources
-# Runs in Azure Cloud Shell (PowerShell) or local PowerShell with Az modules.
-# Creates billable resources. Use cleanup command at the end when finished.
+
+    
+
 $ErrorActionPreference = 'Stop'
 $tenantId          = "91f820e7-a557-448d-8ccf-c7452516ce24"
 $tags              = @{Environment="Production"; Owner="Vinod"}
-$rg = 'rg-lb-class-demo'
-$location = 'centralindia'
-$vnetName = 'vnet-lb-class'
-$subnetName = 'snet-web'
-$lbName = 'lb-web-class'
-$vmNames = @('vm-web-01','vm-web-02')
-$vmSize = 'Standard_B2s' # Change if unavailable for your subscription/region.
 
-# 0. Login / select subscription
-if (-not (Get-AzContext -ErrorAction SilentlyContinue)) { Connect-AzAccount -TenantId $tenantId }
-# Set-AzContext -SubscriptionId '<your-subscription-id>'
-Write-Host "Using subscription: $((Get-AzContext).Subscription.Name)" -ForegroundColor Cyan
-# DEMO ONLY: hardcoded credentials are insecure. Never use in production.
-# Change the password before running and delete the resource group after class.
-$adminUsername = 'azurelabadmin'
-$adminPassword = 'LabDemo!2026#Vm42'
-$securePassword = ConvertTo-SecureString $adminPassword -AsPlainText -Force
-$credential = [System.Management.Automation.PSCredential]::new($adminUsername, $securePassword)
+# ---------- LAB SETTINGS ----------
+$rg              = 'rg-lb-natv2-standalone'
+$location        = 'centralindia'
+$lbName          = 'lb-natv2-demo'
+$poolName        = 'pool-web'
+$vmNames         = @('vm-web-01','vm-web-02')
+$vmSize          = 'Standard_B2s'
+$adminUser       = 'azurelabadmin'
+$adminPassword   = 'LabDemo!2026#Vm42'  # Change this before running; never use in production.
+$frontendStart   = 50001
+$frontendEnd     = 50010
+# Optional override, especially for Azure Cloud Shell: e.g. '203.0.113.10/32'
+$trustedPublicIp = ''
 
-# 1. Resource Group
+# ---------- SIGN IN / SAFETY CHECK ----------
+if (-not (Get-Module -ListAvailable -Name Az.Network)) {
+    throw 'Az.Network is not installed. Install-Module Az -Scope CurrentUser'
+}
+if (-not (Get-AzContext -ErrorAction SilentlyContinue)) {
+      Connect-AzAccount -TenantId $tenantId 
+}
+Write-Host "Subscription: $((Get-AzContext).Subscription.Name)" -ForegroundColor Cyan
+if (Get-AzResourceGroup -Name $rg -ErrorAction SilentlyContinue) {
+    throw "Resource group '$rg' already exists. Use a new name or delete the old disposable lab before rerunning."
+}
+
+# Detect public IP of the machine RUNNING this script. In Cloud Shell, override manually.
+if ([string]::IsNullOrWhiteSpace($trustedPublicIp)) {
+    $ip = [string](Invoke-RestMethod -Uri 'https://api4.ipify.org' -TimeoutSec 15)
+    $parsed = $null
+    if (-not [System.Net.IPAddress]::TryParse($ip.Trim(), [ref]$parsed) -or
+        $parsed.AddressFamily -ne [System.Net.Sockets.AddressFamily]::InterNetwork) {
+        throw "Could not identify a valid public IPv4 address: $ip"
+    }
+    $trustedPublicIp = "$($ip.Trim())/32"
+}
+Write-Host "RDP trusted source: $trustedPublicIp" -ForegroundColor Yellow
+Write-Host 'If running in Cloud Shell, this is its egress IP (not your laptop). Set $trustedPublicIp manually.' -ForegroundColor Yellow
+
+$secure = ConvertTo-SecureString $adminPassword -AsPlainText -Force
+$cred = [pscredential]::new($adminUser, $secure)
+
+# ---------- RESOURCE GROUP / NETWORK ----------
 New-AzResourceGroup -Name $rg -Location $location | Out-Null
-
-# 2. VNet and Subnet
-$subnetConfig = New-AzVirtualNetworkSubnetConfig -Name $subnetName -AddressPrefix '10.10.1.0/24'
+$subnetConfig = New-AzVirtualNetworkSubnetConfig -Name 'subnet-web' -AddressPrefix '10.20.1.0/24'
 $vnet = New-AzVirtualNetwork -ResourceGroupName $rg -Location $location `
-    -Name $vnetName -AddressPrefix '10.10.0.0/16' -Subnet $subnetConfig
-$subnet = $vnet.Subnets | Where-Object Name -EQ $subnetName
+    -Name 'vnet-natv2-demo' -AddressPrefix '10.20.0.0/16' -Subnet $subnetConfig
+$subnet = $vnet.Subnets[0]
 
-# 3. NSG: allow HTTP and load balancer probes (no public RDP)
-$httpRule = New-AzNetworkSecurityRuleConfig -Name 'allow-http' -Priority 100 `
-    -Direction Inbound -Access Allow -Protocol Tcp -SourceAddressPrefix Internet `
-    -SourcePortRange '*' -DestinationAddressPrefix '*' -DestinationPortRange 80
-$probeRule = New-AzNetworkSecurityRuleConfig -Name 'allow-lb-probe' -Priority 110 `
-    -Direction Inbound -Access Allow -Protocol Tcp -SourceAddressPrefix AzureLoadBalancer `
-    -SourcePortRange '*' -DestinationAddressPrefix '*' -DestinationPortRange 80
-$nsg = New-AzNetworkSecurityGroup -Name 'nsg-lb-web' -ResourceGroupName $rg `
-    -Location $location -SecurityRules $httpRule,$probeRule
+# Important: backend NSG sees translated destination TCP 3389, NOT port 50001.
+$rules = @(
+    (New-AzNetworkSecurityRuleConfig -Name 'Allow-HTTP' -Protocol Tcp `
+        -Direction Inbound -Priority 100 -Access Allow -SourceAddressPrefix Internet `
+        -SourcePortRange '*' -DestinationAddressPrefix '*' -DestinationPortRange 80),
+    (New-AzNetworkSecurityRuleConfig -Name 'Allow-RDP-Trusted-IP' -Protocol Tcp `
+        -Direction Inbound -Priority 110 -Access Allow -SourceAddressPrefix $trustedPublicIp `
+        -SourcePortRange '*' -DestinationAddressPrefix '*' -DestinationPortRange 3389),
+    (New-AzNetworkSecurityRuleConfig -Name 'Allow-LB-Health-Probe' -Protocol Tcp `
+        -Direction Inbound -Priority 120 -Access Allow -SourceAddressPrefix AzureLoadBalancer `
+        -SourcePortRange '*' -DestinationAddressPrefix '*' -DestinationPortRange 80)
+)
+$nsg = New-AzNetworkSecurityGroup -Name 'nsg-web' -ResourceGroupName $rg `
+    -Location $location -SecurityRules $rules
 
-# 4. Standard Public IP
-$pip = New-AzPublicIpAddress -Name 'pip-lb-web' -ResourceGroupName $rg `
+# ---------- LOAD BALANCER / NAT V2 ----------
+$pip = New-AzPublicIpAddress -Name 'pip-natv2-demo' -ResourceGroupName $rg `
     -Location $location -Sku Standard -AllocationMethod Static
+$fe = New-AzLoadBalancerFrontendIpConfig -Name 'frontend-public' -PublicIpAddress $pip
+$be = New-AzLoadBalancerBackendAddressPoolConfig -Name $poolName
+$probe = New-AzLoadBalancerProbeConfig -Name 'probe-web' -Protocol Tcp -Port 80 `
+    -IntervalInSeconds 5 -ProbeCount 2
+$webRule = New-AzLoadBalancerRuleConfig -Name 'web-80' -Protocol Tcp `
+    -FrontendPort 80 -BackendPort 80 -FrontendIpConfiguration $fe `
+    -BackendAddressPool $be -Probe $probe -DisableOutboundSNAT
 
-# 5. Load Balancer components
-$frontend = New-AzLoadBalancerFrontendIpConfig -Name 'fe-public' -PublicIpAddress $pip
-$backend = New-AzLoadBalancerBackendAddressPoolConfig -Name 'pool-web'
-$probe = New-AzLoadBalancerProbeConfig -Name 'probe-tcp-80' -Protocol Tcp `
-    -Port 80 -IntervalInSeconds 5 -ProbeCount 2
-$rule = New-AzLoadBalancerRuleConfig -Name 'rule-http-80' -Protocol Tcp `
-    -FrontendPort 80 -BackendPort 80 -FrontendIpConfiguration $frontend `
-    -BackendAddressPool $backend -Probe $probe -DisableOutboundSNAT
+# ONE V2 rule assigns a distinct frontend port to each eligible backend VM.
+$natV2 = New-AzLoadBalancerInboundNatRuleConfig -Name 'rdp-nat-v2' -Protocol Tcp `
+    -FrontendIpConfiguration $fe -FrontendPortRangeStart $frontendStart `
+    -FrontendPortRangeEnd $frontendEnd -BackendAddressPool $be -BackendPort 3389
+
 $lb = New-AzLoadBalancer -Name $lbName -ResourceGroupName $rg -Location $location `
-    -Sku Standard -FrontendIpConfiguration $frontend -BackendAddressPool $backend `
-    -Probe $probe -LoadBalancingRule $rule
-$backendPool = $lb.BackendAddressPools | Where-Object Name -EQ 'pool-web'
+    -Sku Standard -FrontendIpConfiguration $fe -BackendAddressPool $be `
+    -Probe $probe -LoadBalancingRule $webRule -InboundNatRule $natV2
+$poolId = ($lb.BackendAddressPools | Where-Object Name -eq $poolName).Id
 
-# 6. Two network interfaces and Windows VMs
+# ---------- CREATE TWO WINDOWS VMS ----------
 foreach ($vmName in $vmNames) {
     Write-Host "Creating $vmName ..." -ForegroundColor Cyan
+    $ipConfig = New-AzNetworkInterfaceIpConfig -Name 'ipconfig1' -SubnetId $subnet.Id `
+        -LoadBalancerBackendAddressPoolId $poolId
     $nic = New-AzNetworkInterface -Name "nic-$vmName" -ResourceGroupName $rg `
-        -Location $location -Subnet $subnet -NetworkSecurityGroup $nsg `
-        -LoadBalancerBackendAddressPool $backendPool
+        -Location $location -IpConfiguration $ipConfig -NetworkSecurityGroupId $nsg.Id
     $vm = New-AzVMConfig -VMName $vmName -VMSize $vmSize
     $vm = Set-AzVMOperatingSystem -VM $vm -Windows -ComputerName $vmName `
-        -Credential $credential -ProvisionVMAgent
-    $vm = Set-AzVMSourceImage -VM $vm -PublisherName 'MicrosoftWindowsServer' `
-        -Offer 'WindowsServer' -Skus '2022-datacenter-azure-edition' -Version 'latest'
-    $vm = Add-AzVMNetworkInterface -VM $vm -Id $nic.Id -Primary
+        -Credential $cred -ProvisionVMAgent
+    $vm = Set-AzVMSourceImage -VM $vm -PublisherName MicrosoftWindowsServer `
+        -Offer WindowsServer -Skus '2022-datacenter-azure-edition' -Version latest
+    $vm = Add-AzVMNetworkInterface -VM $vm -Id $nic.Id
     New-AzVM -ResourceGroupName $rg -Location $location -VM $vm | Out-Null
 }
 
-# 7. Install IIS and customize the default home page on each VM
-# Here-string is single-quoted so $env:COMPUTERNAME is evaluated inside each VM.
-$iisScript = @'
+# ---------- CONFIGURE IIS + RDP THROUGH VM RUN COMMAND ----------
+$guestScript = @'
 $ErrorActionPreference = 'Stop'
-Install-WindowsFeature -Name Web-Server -IncludeManagementTools | Out-Null
+Install-WindowsFeature Web-Server -IncludeManagementTools | Out-Null
 $computer = $env:COMPUTERNAME
-$page = @"
-<!DOCTYPE html>
-<html><head><title>Azure Load Balancer Lab</title></head>
-<body style="font-family:Arial;text-align:center;padding:75px">
+$html = @"
+<html><body style="font-family:Arial;text-align:center;padding:60px">
 <h1>Azure Load Balancer Demo</h1>
-<h2>Server: $computer</h2>
-<p>HTTP response served by IIS on $computer</p>
+<h2>Response from $computer</h2>
+<p>Public web load balancing uses TCP 80.</p>
+<p>Inbound NAT V2 uses a unique public port for RDP to each VM.</p>
 </body></html>
 "@
-Set-Content -Path 'C:\inetpub\wwwroot\index.html' -Value $page -Encoding UTF8
-Set-Service -Name W3SVC -StartupType Automatic
-Start-Service W3SVC -ErrorAction SilentlyContinue
-(Get-Service W3SVC).Status
+Set-Content -Path 'C:\inetpub\wwwroot\index.html' -Value $html
+Set-Service W3SVC -StartupType Automatic
+Start-Service W3SVC
+Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
+    -Name fDenyTSConnections -Value 0
+Enable-NetFirewallRule -DisplayGroup 'Remote Desktop'
+Set-Service TermService -StartupType Automatic
+Start-Service TermService
+Write-Output "Configured IIS and RDP on $computer"
 '@
 foreach ($vmName in $vmNames) {
-    Write-Host "Installing IIS on $vmName ..." -ForegroundColor Cyan
+    Write-Host "Configuring IIS/RDP on $vmName ..." -ForegroundColor Cyan
     $result = Invoke-AzVMRunCommand -ResourceGroupName $rg -VMName $vmName `
-        -CommandId 'RunPowerShellScript' -ScriptString $iisScript
-    $result.Value | Select-Object Code,Message | Format-List
+        -CommandId RunPowerShellScript -ScriptString $guestScript
+    $result.Value | ForEach-Object { Write-Host $_.Message }
 }
 
-# 8. Find public URL
-$ip = (Get-AzPublicIpAddress -ResourceGroupName $rg -Name 'pip-lb-web').IpAddress
-$url = "http://$ip/"
-Write-Host "`nLoad balancer URL: $url" -ForegroundColor Green
+# ---------- TEST PUBLIC WEB ----------
+$pip = Get-AzPublicIpAddress -ResourceGroupName $rg -Name 'pip-natv2-demo'
+$publicIp = $pip.IpAddress
+Write-Host "Testing Azure Load Balancer" -ForegroundColor Cyan
+Write-Host "Website: http://$publicIp"
 
-function Test-LB {
-    param([string]$Url,[int]$Count=20)
-    $results = @()
-    for ($i=1; $i -le $Count; $i++) {
-        try {
-            # New connection on each request, as far as the HTTP client permits.
-            $r = Invoke-WebRequest -Uri "$($Url)?request=$i" -DisableKeepAlive `
-                 -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
-            $server = if ($r.Content -match 'Server:\s*(vm-web-\d+)') { $Matches[1] } else { 'Unknown' }
-            Write-Host "Request $i -> $server (HTTP $($r.StatusCode))"
-            $results += $server
-        } catch {
-            Write-Warning "Request $i failed: $($_.Exception.Message)"
+for ($i = 1; $i -le 12; $i++) {
+
+    try {
+        $response = Invoke-WebRequest `
+            -Uri "http://$publicIp/?request=$i" `
+            -UseBasicParsing `
+            -DisableKeepAlive `
+            -TimeoutSec 15 `
+            -ErrorAction Stop
+
+        if ($response.Content -match 'Response from ([\w-]+)') {
+            $server = $Matches[1]
         }
+        else {
+            $server = "Server not identified"
+        }
+
+        Write-Host "Request $i -> $server" -ForegroundColor Green
+
     }
-    Write-Host "`nResponse counts:" -ForegroundColor Cyan
-    $results | Group-Object | Select-Object Name,Count | Format-Table -AutoSize
+    catch {
+        Write-Warning "Request $i failed: $($_.Exception.Message)"
+    }
+
+    Start-Sleep -Milliseconds 500
 }
 
-# 9. Normal traffic test
-Write-Host "`nTesting both healthy servers ..." -ForegroundColor Yellow
-Test-LB -Url $url -Count 20
+# ---------- NAT V2 PORT MAPPING ----------
+Write-Host "`nNAT V2 configured: $frontendStart-$frontendEnd -> backend TCP 3389" -ForegroundColor Green
+Write-Host 'To see actual per-VM port mappings:' -ForegroundColor Yellow
+Write-Host "Azure Portal > Load Balancer > $lbName > Inbound NAT rules > rdp-nat-v2 > Port mapping"
+Write-Host "Once assigned, connect with: mstsc.exe /v:$($publicIp):<assigned-port>"
+Write-Host "Username: $adminUser"
 
-# 10. Failure test - stop IIS on VM1, then test after probes detect failure
-Write-Host "`nStopping IIS on vm-web-01 ..." -ForegroundColor Yellow
-Invoke-AzVMRunCommand -ResourceGroupName $rg -VMName 'vm-web-01' `
-    -CommandId 'RunPowerShellScript' -ScriptString 'Stop-Service W3SVC' | Out-Null
-Start-Sleep -Seconds 30
-Write-Host 'Failover test: new connections should reach vm-web-02' -ForegroundColor Yellow
-Test-LB -Url $url -Count 10
-
-# 11. Recovery test - restart IIS on VM1
-Write-Host "`nRestarting IIS on vm-web-01 ..." -ForegroundColor Yellow
-Invoke-AzVMRunCommand -ResourceGroupName $rg -VMName 'vm-web-01' `
-    -CommandId 'RunPowerShellScript' -ScriptString 'Start-Service W3SVC' | Out-Null
-Start-Sleep -Seconds 30
-Write-Host 'Recovery test: both servers are eligible again' -ForegroundColor Yellow
-Test-LB -Url $url -Count 20
-
-Write-Host "`nDemo finished. Browse: $url" -ForegroundColor Green
-Write-Host "To delete resources after the class, run:" -ForegroundColor Yellow
-Write-Host "Remove-AzResourceGroup -Name '$rg' -Force"
