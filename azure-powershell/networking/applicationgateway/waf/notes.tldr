@@ -1,0 +1,169 @@
+{
+	"tldrawFileFormatVersion": 1,
+	"schema": {
+		"schemaVersion": 2,
+		"sequences": {
+			"com.tldraw.store": 5,
+			"com.tldraw.asset": 1,
+			"com.tldraw.camera": 1,
+			"com.tldraw.document": 2,
+			"com.tldraw.instance": 26,
+			"com.tldraw.instance_page_state": 5,
+			"com.tldraw.page": 1,
+			"com.tldraw.instance_presence": 6,
+			"com.tldraw.pointer": 1,
+			"com.tldraw.shape": 4,
+			"com.tldraw.user": 1,
+			"com.tldraw.asset.image": 6,
+			"com.tldraw.asset.video": 5,
+			"com.tldraw.asset.bookmark": 2,
+			"com.tldraw.shape.group": 0,
+			"com.tldraw.shape.text": 4,
+			"com.tldraw.shape.bookmark": 2,
+			"com.tldraw.shape.draw": 5,
+			"com.tldraw.shape.geo": 12,
+			"com.tldraw.shape.note": 13,
+			"com.tldraw.shape.line": 5,
+			"com.tldraw.shape.frame": 1,
+			"com.tldraw.shape.arrow": 8,
+			"com.tldraw.shape.highlight": 4,
+			"com.tldraw.shape.embed": 4,
+			"com.tldraw.shape.image": 5,
+			"com.tldraw.shape.video": 4,
+			"com.tldraw.binding.arrow": 1
+		}
+	},
+	"records": [
+		{
+			"x": 0,
+			"y": 0,
+			"lastActivityTimestamp": 0,
+			"meta": {},
+			"id": "pointer:pointer",
+			"typeName": "pointer"
+		},
+		{
+			"x": 0,
+			"y": 0,
+			"z": 1,
+			"meta": {},
+			"id": "camera:page:page",
+			"typeName": "camera"
+		},
+		{
+			"editingShapeId": null,
+			"croppingShapeId": null,
+			"selectedShapeIds": [
+				"shape:XPgjnNsfpNZaQ-gBlHNbn"
+			],
+			"hoveredShapeId": "shape:XPgjnNsfpNZaQ-gBlHNbn",
+			"erasingShapeIds": [],
+			"hintingShapeIds": [],
+			"focusedGroupId": null,
+			"meta": {},
+			"id": "instance_page_state:page:page",
+			"pageId": "page:page",
+			"typeName": "instance_page_state"
+		},
+		{
+			"name": "",
+			"color": "#FF802B",
+			"imageUrl": "",
+			"meta": {},
+			"id": "user:egUpxHKtx-P43K7e3sTS6",
+			"typeName": "user"
+		},
+		{
+			"meta": {},
+			"id": "page:page",
+			"name": "Page 1",
+			"index": "a1",
+			"typeName": "page"
+		},
+		{
+			"gridSize": 10,
+			"name": "",
+			"meta": {},
+			"id": "document:document",
+			"typeName": "document"
+		},
+		{
+			"followingUserId": null,
+			"opacityForNextShape": 1,
+			"stylesForNextShape": {},
+			"brush": null,
+			"scribbles": [],
+			"cursor": {
+				"type": "default",
+				"rotation": 0
+			},
+			"isFocusMode": false,
+			"exportBackground": true,
+			"isDebugMode": false,
+			"isToolLocked": false,
+			"screenBounds": {
+				"x": 0,
+				"y": 0,
+				"w": 1618,
+				"h": 744
+			},
+			"insets": [
+				false,
+				false,
+				true,
+				false
+			],
+			"zoomBrush": null,
+			"isGridMode": false,
+			"isPenMode": false,
+			"chatMessage": "",
+			"isChatting": false,
+			"highlightedUserIds": [],
+			"isFocused": true,
+			"devicePixelRatio": 1,
+			"isCoarsePointer": false,
+			"isHoveringCanvas": true,
+			"openMenus": [],
+			"isChangingStyle": false,
+			"isReadonly": false,
+			"meta": {},
+			"duplicateProps": null,
+			"cameraState": "idle",
+			"id": "instance:instance",
+			"currentPageId": "page:page",
+			"typeName": "instance"
+		},
+		{
+			"id": "asset:-1935003819",
+			"typeName": "asset",
+			"type": "bookmark",
+			"props": {
+				"src": "https://www.tldraw.com/f/8RtjdhHUJ7wWvaiDrTxJ8?d=v-287.-455.1898.1068.vUgYnHT0yxBWC0qa2E3gA",
+				"description": "A free and instant collaborative whiteboarding tool.",
+				"image": "https://www.tldraw.com/social-og.png",
+				"favicon": "https://www.tldraw.com/apple-touch-icon.png",
+				"title": "tldraw"
+			},
+			"meta": {}
+		},
+		{
+			"x": 234,
+			"y": 116,
+			"rotation": 0,
+			"isLocked": false,
+			"opacity": 1,
+			"meta": {},
+			"id": "shape:XPgjnNsfpNZaQ-gBlHNbn",
+			"type": "bookmark",
+			"props": {
+				"url": "https://www.tldraw.com/f/8RtjdhHUJ7wWvaiDrTxJ8?d=v-287.-455.1898.1068.vUgYnHT0yxBWC0qa2E3gA",
+				"w": 300,
+				"h": 320,
+				"assetId": "asset:-1935003819"
+			},
+			"parentId": "page:page",
+			"index": "a1EAj",
+			"typeName": "shape"
+		}
+	]
+}
